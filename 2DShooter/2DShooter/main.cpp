@@ -23,6 +23,10 @@ struct GameApplication
 {
 	SDL_Window* m_pWindow;
 	SDL_Renderer* m_pRenderer;
+	int m_up;
+	int m_down;
+	int m_left;
+	int m_right;
 };
 
 struct Entity
@@ -95,6 +99,59 @@ void closeSDL()
 	SDL_Quit();
 
 }
+
+void doKeyDown(SDL_KeyboardEvent* pEvent)
+{
+	if (!pEvent->repeat)
+	{
+		if (pEvent->keysym.scancode == SDL_SCANCODE_UP)
+		{
+			gGame.m_up = 1;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_DOWN)
+		{
+			gGame.m_down = 1;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_LEFT)
+		{
+			gGame.m_left = 1;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_RIGHT)
+		{
+			gGame.m_right = 1;
+		}
+	}
+}
+
+void doKeyUp(SDL_KeyboardEvent* pEvent)
+{
+	if (!pEvent->repeat)
+	{
+		if (pEvent->keysym.scancode == SDL_SCANCODE_UP)
+		{
+			gGame.m_up = 0;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_DOWN)
+		{
+			gGame.m_down = 0;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_LEFT)
+		{
+			gGame.m_left = 0;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_RIGHT)
+		{
+			gGame.m_right = 0;
+		}
+	}
+}
+
 void handleInput()
 {
 	SDL_Event e;
@@ -105,6 +162,12 @@ void handleInput()
 		{
 		case SDL_QUIT:
 			exit(0);
+			break;
+		case SDL_KEYDOWN:
+			doKeyDown(&e.key);
+			break;
+		case SDL_KEYUP:
+			doKeyUp(&e.key);
 			break;
 		default:
 			break;
@@ -163,6 +226,27 @@ int main( int argc, char* args[] )
 		while (true)
 		{
 			handleInput();
+
+			if (gGame.m_up)
+			{
+				gPlayer.m_y -= 4;
+			}
+
+			if (gGame.m_down)
+			{
+				gPlayer.m_y += 4;
+			}
+
+			if (gGame.m_left)
+			{
+				gPlayer.m_x -= 4;
+			}
+
+			if (gGame.m_right)
+			{
+				gPlayer.m_x += 4;
+			}
+
 			updateGame();
 			
 			draw();
