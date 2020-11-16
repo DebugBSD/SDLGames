@@ -4,6 +4,7 @@ and may not be redistributed without written permission.*/
 //Using SDL and standard IO
 #include <windows.h>
 #include <SDL.h>
+#include <SDL_image.h>
 #include <stdio.h>
 
 /*
@@ -24,11 +25,21 @@ struct GameApplication
 	SDL_Renderer* m_pRenderer;
 };
 
+struct Entity
+{
+	int m_x;
+	int m_y;
+	SDL_Texture* m_pTexture;
+};
+
+void blit(SDL_Texture* pTexture, int x, int y);
+
 /* 
  * Globals
  */
 
 GameApplication gGame;
+Entity gPlayer;
 
 /*
  * Functions 
@@ -62,12 +73,28 @@ bool initSDL()
 				printf("Unable to create a renderer! SDL Error: %s\n", SDL_GetError());
 				success = false;
 			}
+
+			if (!IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG))
+			{
+				printf("Unable to init Image subsystem! SDL Error: %s\n", SDL_GetError());
+				success = false;
+			}
 		}
 	}
 
 	return success;
 }
 
+void closeSDL()
+{
+	SDL_DestroyWindow(gGame.m_pWindow);
+
+	SDL_DestroyRenderer(gGame.m_pRenderer);
+
+	IMG_Quit();
+	SDL_Quit();
+
+}
 void handleInput()
 {
 	SDL_Event e;
@@ -89,6 +116,29 @@ void updateGame()
 {
 	SDL_SetRenderDrawColor(gGame.m_pRenderer, 96, 128,255, 255);
 	SDL_RenderClear(gGame.m_pRenderer);
+
+	// Draw the scene
+	blit(gPlayer.m_pTexture, gPlayer.m_x, gPlayer.m_y);
+}
+
+SDL_Texture* loadTexture(const char *pFileName)
+{
+	SDL_Texture* pTexture = NULL;
+
+	pTexture = IMG_LoadTexture(gGame.m_pRenderer,pFileName);
+
+	return pTexture;
+}
+
+void blit(SDL_Texture* pTexture, int x, int y)
+{
+	SDL_Rect dest{ x,y };
+
+	// This function retrieves the dimensions from the image.
+	SDL_QueryTexture(pTexture, NULL, NULL, &dest.w, &dest.h);
+
+	// Draws the texture on the coordinates specified into dest structure.
+	SDL_RenderCopy(gGame.m_pRenderer, pTexture, NULL, &dest);
 }
 
 void draw()
@@ -105,16 +155,21 @@ int main( int argc, char* args[] )
 	}
 	else
 	{
+		gPlayer.m_x = 100;
+		gPlayer.m_y = 100;
+		gPlayer.m_pTexture = loadTexture("player.png");
+
 		// Gameloop
 		while (true)
 		{
 			handleInput();
 			updateGame();
+			
 			draw();
 		}
 
 		//Quit SDL subsystems
-		SDL_Quit();
+		closeSDL();
 
 	}
 	
