@@ -27,12 +27,16 @@ struct GameApplication
 	int m_down;
 	int m_left;
 	int m_right;
+	int m_fire;
 };
 
 struct Entity
 {
 	int m_x;
 	int m_y;
+	int m_dx;
+	int m_dy;
+	int m_health;
 	SDL_Texture* m_pTexture;
 };
 
@@ -44,6 +48,7 @@ void blit(SDL_Texture* pTexture, int x, int y);
 
 GameApplication gGame;
 Entity gPlayer;
+Entity gBullet;
 
 /*
  * Functions 
@@ -123,6 +128,10 @@ void doKeyDown(SDL_KeyboardEvent* pEvent)
 		{
 			gGame.m_right = 1;
 		}
+		if (pEvent->keysym.scancode == SDL_SCANCODE_LCTRL)
+		{
+			gGame.m_fire = 1;
+		}
 	}
 }
 
@@ -148,6 +157,11 @@ void doKeyUp(SDL_KeyboardEvent* pEvent)
 		if (pEvent->keysym.scancode == SDL_SCANCODE_RIGHT)
 		{
 			gGame.m_right = 0;
+		}
+
+		if (pEvent->keysym.scancode == SDL_SCANCODE_LCTRL)
+		{
+			gGame.m_fire = 0;
 		}
 	}
 }
@@ -182,6 +196,11 @@ void updateGame()
 
 	// Draw the scene
 	blit(gPlayer.m_pTexture, gPlayer.m_x, gPlayer.m_y);
+
+	if (gBullet.m_health > 0)
+	{
+		blit(gBullet.m_pTexture, gBullet.m_x, gBullet.m_y);
+	}
 }
 
 SDL_Texture* loadTexture(const char *pFileName)
@@ -218,9 +237,14 @@ int main( int argc, char* args[] )
 	}
 	else
 	{
+		memset(&gPlayer,0, sizeof(Entity));
+		memset(&gBullet, 0, sizeof(Entity));
+
 		gPlayer.m_x = 100;
 		gPlayer.m_y = 100;
 		gPlayer.m_pTexture = loadTexture("player.png");
+
+		gBullet.m_pTexture = loadTexture("playerBullet.png");
 
 		// Gameloop
 		while (true)
@@ -245,6 +269,27 @@ int main( int argc, char* args[] )
 			if (gGame.m_right)
 			{
 				gPlayer.m_x += 4;
+			}
+
+			if (gGame.m_fire && gBullet.m_health == 0)
+			{
+				int w, h;
+				int bW, bH;
+				SDL_QueryTexture(gPlayer.m_pTexture, NULL, NULL, &w, &h);
+				SDL_QueryTexture(gBullet.m_pTexture, NULL, NULL, &bW, &bH);
+				gBullet.m_x = gPlayer.m_x + w;
+				gBullet.m_y = gPlayer.m_y + (h/2) - (bH/2);
+				gBullet.m_dx = 16;
+				gBullet.m_dy = 0;
+				gBullet.m_health = 1;
+			}
+
+			gBullet.m_x += gBullet.m_dx;
+			gBullet.m_y += gBullet.m_dy;
+
+			if (gBullet.m_x > SCREEN_WIDTH)
+			{
+				gBullet.m_health = 0;
 			}
 
 			updateGame();
