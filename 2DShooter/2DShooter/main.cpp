@@ -15,29 +15,45 @@ and may not be redistributed without written permission.*/
 const int SCREEN_WIDTH = 1280;
 const int SCREEN_HEIGHT = 720;
 
+const int MAX_KEYBOARD_KEYS = 350;
+
+const int PLAYER_SPEED = 4;
+const int PLAYER_BULLET_SPEED = 16;
 /*
  * Definitions
  */
+
+struct Delegate
+{
+	void (*logic)(void);
+	void (*draw)(void);
+};
 
 struct GameApplication
 {
 	SDL_Window* m_pWindow;
 	SDL_Renderer* m_pRenderer;
-	int m_up;
-	int m_down;
-	int m_left;
-	int m_right;
-	int m_fire;
+	Delegate m_delegate;
+	int keyboard[MAX_KEYBOARD_KEYS];
 };
 
 struct Entity
 {
-	int m_x;
-	int m_y;
-	int m_dx;
-	int m_dy;
+	float m_x;
+	float m_y;
+	int m_w;
+	int m_h;
+	float m_dx;
+	float m_dy;
 	int m_health;
+	int m_reload;
 	SDL_Texture* m_pTexture;
+	Entity* m_pNext;
+};
+
+struct Stage {
+	Entity fighterHead, * pFighterTail;
+	Entity bulletHead, * pBulletTail;
 };
 
 void blit(SDL_Texture* pTexture, int x, int y);
@@ -47,8 +63,9 @@ void blit(SDL_Texture* pTexture, int x, int y);
  */
 
 GameApplication gGame;
-Entity gPlayer;
-Entity gBullet;
+Stage gStage;
+SDL_Texture* gBulletTexture = NULL;
+Entity* pPlayer = NULL;
 
 /*
  * Functions 
@@ -76,7 +93,7 @@ bool initSDL()
 		{
 			SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 			//Get window surface
-			gGame.m_pRenderer = SDL_CreateRenderer(gGame.m_pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+			gGame.m_pRenderer = SDL_CreateRenderer(gGame.m_pWindow, -1, SDL_RENDERER_ACCELERATED /*| SDL_RENDERER_PRESENTVSYNC*/);
 			if (gGame.m_pRenderer == NULL)
 			{
 				printf("Unable to create a renderer! SDL Error: %s\n", SDL_GetError());
@@ -105,65 +122,145 @@ void closeSDL()
 
 }
 
+SDL_Texture* loadTexture(const char* pFileName)
+{
+	SDL_Texture* pTexture = NULL;
+
+	pTexture = IMG_LoadTexture(gGame.m_pRenderer, pFileName);
+
+	return pTexture;
+}
+
 void doKeyDown(SDL_KeyboardEvent* pEvent)
 {
-	if (!pEvent->repeat)
+	if (!pEvent->repeat && pEvent->keysym.scancode < MAX_KEYBOARD_KEYS)
 	{
-		if (pEvent->keysym.scancode == SDL_SCANCODE_UP)
-		{
-			gGame.m_up = 1;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_DOWN)
-		{
-			gGame.m_down = 1;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_LEFT)
-		{
-			gGame.m_left = 1;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_RIGHT)
-		{
-			gGame.m_right = 1;
-		}
-		if (pEvent->keysym.scancode == SDL_SCANCODE_LCTRL)
-		{
-			gGame.m_fire = 1;
-		}
+		gGame.keyboard[pEvent->keysym.scancode] = 1;
 	}
 }
 
 void doKeyUp(SDL_KeyboardEvent* pEvent)
 {
-	if (!pEvent->repeat)
+	if (!pEvent->repeat && pEvent->keysym.scancode < MAX_KEYBOARD_KEYS)
 	{
-		if (pEvent->keysym.scancode == SDL_SCANCODE_UP)
-		{
-			gGame.m_up = 0;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_DOWN)
-		{
-			gGame.m_down = 0;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_LEFT)
-		{
-			gGame.m_left = 0;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_RIGHT)
-		{
-			gGame.m_right = 0;
-		}
-
-		if (pEvent->keysym.scancode == SDL_SCANCODE_LCTRL)
-		{
-			gGame.m_fire = 0;
-		}
+		gGame.keyboard[pEvent->keysym.scancode] = 0;
 	}
+}
+
+static void fireBullet()
+{
+	Entity* pBullet;
+
+	pBullet = (Entity*)malloc(sizeof(Entity));
+	memset(pBullet, 0, sizeof(Entity));
+	gStage.pBulletTail->m_pNext = pBullet;
+	gStage.pBulletTail = pBullet;
+
+	pBullet->m_x = pPlayer->m_x;
+	pBullet->m_y = pPlayer->m_y;
+	pBullet->m_dx = PLAYER_BULLET_SPEED;
+	pBullet->m_pTexture = gBulletTexture;
+	SDL_QueryTexture(pBullet->m_pTexture, NULL, NULL, &pBullet->m_w, &pBullet->m_h);
+
+	pBullet->m_y += (pPlayer->m_h / 2) - (pBullet->m_h / 2);
+	pPlayer->m_reload = 8;
+}
+
+static void doPlayer(void)
+{
+	pPlayer->m_dx = pPlayer->m_dy = 0;
+
+	if (pPlayer->m_reload > 0)					pPlayer->m_reload--;
+	if (gGame.keyboard[SDL_SCANCODE_UP])		pPlayer->m_dy = -PLAYER_SPEED;
+	if (gGame.keyboard[SDL_SCANCODE_DOWN])		pPlayer->m_dy = PLAYER_SPEED;
+	if (gGame.keyboard[SDL_SCANCODE_LEFT])		pPlayer->m_dx = -PLAYER_SPEED;
+	if (gGame.keyboard[SDL_SCANCODE_RIGHT])		pPlayer->m_dx = PLAYER_SPEED;
+	if (gGame.keyboard[SDL_SCANCODE_LCTRL] && pPlayer->m_reload == 0)	fireBullet();
+
+	pPlayer->m_x += pPlayer->m_dx;
+	pPlayer->m_y += pPlayer->m_dy;
+}
+
+static void doBullets(void)
+{
+	Entity* b, * prev;
+
+	prev = &gStage.bulletHead;
+
+	for (b = gStage.bulletHead.m_pNext; b != NULL; b = b->m_pNext)
+	{
+		b->m_x += b->m_dx;
+		b->m_y += b->m_dy;
+
+		if (b->m_x > SCREEN_WIDTH)
+		{
+			if (b == gStage.pBulletTail)
+			{
+				gStage.pBulletTail = prev;
+			}
+
+			prev->m_pNext = b->m_pNext;
+			free(b);
+			b = prev;
+		}
+
+		prev = b;
+	}
+}
+
+static void logic()
+{
+	doPlayer();
+
+	doBullets();
+}
+
+static void drawPlayer()
+{
+	blit(pPlayer->m_pTexture, pPlayer->m_x, pPlayer->m_y);
+}
+
+static void drawBullets()
+{
+	Entity* b;
+	for (b = gStage.bulletHead.m_pNext; b != NULL; b = b->m_pNext)
+	{
+		blit(b->m_pTexture, b->m_x, b->m_y);
+	}
+}
+
+static void draw()
+{
+	drawPlayer();
+
+	drawBullets();
+}
+
+void initPlayer()
+{
+	pPlayer = (Entity*)malloc(sizeof(Entity));
+	memset(pPlayer, 0, sizeof(Entity));
+	gStage.pFighterTail->m_pNext = pPlayer;
+	gStage.pFighterTail = pPlayer;
+
+	pPlayer->m_x = 100.0f;
+	pPlayer->m_y = 100.0f;
+	pPlayer->m_pTexture = loadTexture("player.png");
+	SDL_QueryTexture(pPlayer->m_pTexture, NULL, NULL, &pPlayer->m_w, &pPlayer->m_h);
+}
+
+void initStage()
+{
+	gGame.m_delegate.logic = logic;
+	gGame.m_delegate.draw = draw;
+
+	memset(&gStage, 0, sizeof(Stage));
+	gStage.pFighterTail = &gStage.fighterHead; 
+	gStage.pBulletTail = &gStage.bulletHead;
+
+	initPlayer();
+
+	gBulletTexture = loadTexture("playerBullet.png");
 }
 
 void handleInput()
@@ -195,21 +292,7 @@ void updateGame()
 	SDL_RenderClear(gGame.m_pRenderer);
 
 	// Draw the scene
-	blit(gPlayer.m_pTexture, gPlayer.m_x, gPlayer.m_y);
 
-	if (gBullet.m_health > 0)
-	{
-		blit(gBullet.m_pTexture, gBullet.m_x, gBullet.m_y);
-	}
-}
-
-SDL_Texture* loadTexture(const char *pFileName)
-{
-	SDL_Texture* pTexture = NULL;
-
-	pTexture = IMG_LoadTexture(gGame.m_pRenderer,pFileName);
-
-	return pTexture;
 }
 
 void blit(SDL_Texture* pTexture, int x, int y)
@@ -223,78 +306,63 @@ void blit(SDL_Texture* pTexture, int x, int y)
 	SDL_RenderCopy(gGame.m_pRenderer, pTexture, NULL, &dest);
 }
 
-void draw()
+void drawScene()
 {
 	SDL_RenderPresent(gGame.m_pRenderer);
 }
 
+static void capFrameRate(long* then, float* remainder)
+{
+	long wait, frameTime;
+	wait = 16 + *remainder;
+	*remainder -= (int)*remainder;
+
+	frameTime = SDL_GetTicks() - *then;
+
+	wait -= frameTime;
+
+	if (wait < 1)
+	{
+		wait = 1;
+	}
+
+	SDL_Delay(wait);
+
+	*remainder += 0 - 667;
+
+	*then = SDL_GetTicks();
+}
+
 int main( int argc, char* args[] )
 {
+	memset(&gGame, 0, sizeof(GameApplication));
 	int exitCode = EXIT_SUCCESS;
+
 	if (!initSDL())
 	{
 		exitCode = EXIT_FAILURE;
 	}
 	else
 	{
-		memset(&gPlayer,0, sizeof(Entity));
-		memset(&gBullet, 0, sizeof(Entity));
+		long then;
+		float remainder;
 
-		gPlayer.m_x = 100;
-		gPlayer.m_y = 100;
-		gPlayer.m_pTexture = loadTexture("player.png");
+		initStage();
 
-		gBullet.m_pTexture = loadTexture("playerBullet.png");
+		then = SDL_GetTicks();
+		remainder = 0;
 
 		// Gameloop
 		while (true)
 		{
 			handleInput();
 
-			if (gGame.m_up)
-			{
-				gPlayer.m_y -= 4;
-			}
-
-			if (gGame.m_down)
-			{
-				gPlayer.m_y += 4;
-			}
-
-			if (gGame.m_left)
-			{
-				gPlayer.m_x -= 4;
-			}
-
-			if (gGame.m_right)
-			{
-				gPlayer.m_x += 4;
-			}
-
-			if (gGame.m_fire && gBullet.m_health == 0)
-			{
-				int w, h;
-				int bW, bH;
-				SDL_QueryTexture(gPlayer.m_pTexture, NULL, NULL, &w, &h);
-				SDL_QueryTexture(gBullet.m_pTexture, NULL, NULL, &bW, &bH);
-				gBullet.m_x = gPlayer.m_x + w;
-				gBullet.m_y = gPlayer.m_y + (h/2) - (bH/2);
-				gBullet.m_dx = 16;
-				gBullet.m_dy = 0;
-				gBullet.m_health = 1;
-			}
-
-			gBullet.m_x += gBullet.m_dx;
-			gBullet.m_y += gBullet.m_dy;
-
-			if (gBullet.m_x > SCREEN_WIDTH)
-			{
-				gBullet.m_health = 0;
-			}
-
 			updateGame();
-			
-			draw();
+			gGame.m_delegate.logic();
+			gGame.m_delegate.draw();
+			drawScene();
+
+			capFrameRate(&then, &remainder);
 		}
 
 		//Quit SDL subsystems
