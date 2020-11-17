@@ -65,8 +65,9 @@ void blit(SDL_Texture* pTexture, int x, int y);
 GameApplication gGame;
 Stage gStage;
 SDL_Texture* gBulletTexture = NULL;
+SDL_Texture* gEnemyTexture = NULL;
 Entity* pPlayer = NULL;
-
+int enemySpawnerTimer;
 /*
  * Functions 
  */
@@ -93,7 +94,7 @@ bool initSDL()
 		{
 			SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 			//Get window surface
-			gGame.m_pRenderer = SDL_CreateRenderer(gGame.m_pWindow, -1, SDL_RENDERER_ACCELERATED /*| SDL_RENDERER_PRESENTVSYNC*/);
+			gGame.m_pRenderer = SDL_CreateRenderer(gGame.m_pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 			if (gGame.m_pRenderer == NULL)
 			{
 				printf("Unable to create a renderer! SDL Error: %s\n", SDL_GetError());
@@ -208,11 +209,62 @@ static void doBullets(void)
 	}
 }
 
+static void doFighters()
+{
+	Entity *e, * prev = NULL;
+
+	for (e = gStage.fighterHead.m_pNext; e != NULL; e = e->m_pNext)
+	{
+		e->m_x += e->m_dx;
+		e->m_y += e->m_dy;
+
+		if (e != pPlayer && e->m_x < -e->m_w)
+		{
+			if (e == gStage.pFighterTail)
+			{
+				gStage.pFighterTail = prev;
+			}
+
+			prev->m_pNext = e->m_pNext;
+			free(e);
+			e = prev;
+		}
+
+		prev = e;
+	}
+}
+
+static void spawnEnemies()
+{
+	Entity* enemy;
+
+	if (--enemySpawnerTimer <= 0)
+	{
+		enemy = (Entity*)malloc(sizeof(Entity));
+		memset(enemy, 0, sizeof(Entity));
+		gStage.pFighterTail->m_pNext = enemy;
+		gStage.pFighterTail = enemy;
+
+		enemy->m_x = SCREEN_WIDTH;
+		enemy->m_y = rand() % SCREEN_HEIGHT;
+		enemy->m_pTexture = gEnemyTexture;
+		SDL_QueryTexture(enemy->m_pTexture, NULL, NULL, &enemy->m_w, &enemy->m_h);
+
+		enemy->m_dx = -(2 + rand() % 4);
+
+		enemySpawnerTimer = 30 + (rand() % 60);
+	}
+}
+
 static void logic()
 {
 	doPlayer();
 
+	doFighters();
+
 	doBullets();
+
+	spawnEnemies();
 }
 
 static void drawPlayer()
@@ -229,11 +281,22 @@ static void drawBullets()
 	}
 }
 
+static void drawFighters()
+{
+	Entity* e;
+	for (e = gStage.fighterHead.m_pNext; e != NULL; e = e->m_pNext)
+	{
+		blit(e->m_pTexture, e->m_x, e->m_y);
+	}
+}
+
 static void draw()
 {
 	drawPlayer();
 
 	drawBullets();
+
+	drawFighters();
 }
 
 void initPlayer()
@@ -261,6 +324,9 @@ void initStage()
 	initPlayer();
 
 	gBulletTexture = loadTexture("playerBullet.png");
+	gEnemyTexture = loadTexture("enemy.png");
+
+	enemySpawnerTimer = 0;
 }
 
 void handleInput()
