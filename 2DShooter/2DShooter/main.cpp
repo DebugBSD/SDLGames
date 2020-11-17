@@ -19,6 +19,13 @@ const int MAX_KEYBOARD_KEYS = 350;
 
 const int PLAYER_SPEED = 4;
 const int PLAYER_BULLET_SPEED = 16;
+
+const int SIDE_PLAYER = 0;
+const int SIDE_ALIEN = 1;
+
+#define MAX(a,b) ((a>b)?a:b)
+#define MIN(a,b) ((a<b)?a:b)
+
 /*
  * Definitions
  */
@@ -49,6 +56,7 @@ struct Entity
 	int m_reload;
 	SDL_Texture* m_pTexture;
 	Entity* m_pNext;
+	int m_side;
 };
 
 struct Stage {
@@ -123,6 +131,11 @@ void closeSDL()
 
 }
 
+int collision(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2)
+{
+	return (MAX(x1, x2) < MIN(x1 + w1, x2 + w2)) && (MAX(y1, y2) < MIN(y1 + h1, y2 + h2));
+}
+
 SDL_Texture* loadTexture(const char* pFileName)
 {
 	SDL_Texture* pTexture = NULL;
@@ -161,6 +174,7 @@ static void fireBullet()
 	pBullet->m_y = pPlayer->m_y;
 	pBullet->m_dx = PLAYER_BULLET_SPEED;
 	pBullet->m_pTexture = gBulletTexture;
+	pBullet->m_side = SIDE_PLAYER;
 	SDL_QueryTexture(pBullet->m_pTexture, NULL, NULL, &pBullet->m_w, &pBullet->m_h);
 
 	pBullet->m_y += (pPlayer->m_h / 2) - (pBullet->m_h / 2);
@@ -182,6 +196,23 @@ static void doPlayer(void)
 	pPlayer->m_y += pPlayer->m_dy;
 }
 
+static int bulletHitFighter(Entity* b)
+{
+	Entity* e;
+
+	for (e = gStage.fighterHead.m_pNext; e != NULL; e = e->m_pNext)
+	{
+		if (e->m_side != b->m_side && collision(b->m_x, b->m_y, b->m_w, b->m_h, e->m_x, e->m_y, e->m_w, e->m_h))
+		{
+			b->m_health = 0;
+			e->m_health = 0;
+
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void doBullets(void)
 {
 	Entity* b, * prev;
@@ -193,7 +224,7 @@ static void doBullets(void)
 		b->m_x += b->m_dx;
 		b->m_y += b->m_dy;
 
-		if (b->m_x > SCREEN_WIDTH)
+		if (bulletHitFighter(b) || b->m_x > SCREEN_WIDTH)
 		{
 			if (b == gStage.pBulletTail)
 			{
@@ -218,7 +249,7 @@ static void doFighters()
 		e->m_x += e->m_dx;
 		e->m_y += e->m_dy;
 
-		if (e != pPlayer && e->m_x < -e->m_w)
+		if (e != pPlayer && (e->m_x < -e->m_w ||e->m_health == 0))
 		{
 			if (e == gStage.pFighterTail)
 			{
@@ -248,6 +279,8 @@ static void spawnEnemies()
 		enemy->m_x = SCREEN_WIDTH;
 		enemy->m_y = rand() % SCREEN_HEIGHT;
 		enemy->m_pTexture = gEnemyTexture;
+		enemy->m_side = SIDE_ALIEN;
+		enemy->m_health = 1;
 		SDL_QueryTexture(enemy->m_pTexture, NULL, NULL, &enemy->m_w, &enemy->m_h);
 
 		enemy->m_dx = -(2 + rand() % 4);
@@ -309,6 +342,7 @@ void initPlayer()
 	pPlayer->m_x = 100.0f;
 	pPlayer->m_y = 100.0f;
 	pPlayer->m_pTexture = loadTexture("player.png");
+	pPlayer->m_side = SIDE_PLAYER;
 	SDL_QueryTexture(pPlayer->m_pTexture, NULL, NULL, &pPlayer->m_w, &pPlayer->m_h);
 }
 
